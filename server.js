@@ -16,7 +16,7 @@ const isPrime = (num) => {
 };
 
 const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
-const lcm = (a, b) => (a * b) / gcd(a, b);
+const lcm = (a, b) => (a === 0 || b === 0 ? 0 : Math.abs(a * b) / gcd(a, b));
 
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -28,10 +28,12 @@ app.get("/health", (req, res) => {
 app.post("/bfhl", async (req, res) => {
   try {
     const keys = Object.keys(req.body);
+
     if (keys.length !== 1) {
-      return res
-        .status(400)
-        .json({ is_success: false, message: "Exactly one key required" });
+      return res.status(400).json({
+        is_success: false,
+        message: "Request must contain exactly one valid functional key.",
+      });
     }
 
     const key = keys[0];
@@ -41,41 +43,48 @@ app.post("/bfhl", async (req, res) => {
     switch (key) {
       case "fibonacci":
         const n = parseInt(input);
+        if (isNaN(n) || n < 1)
+          throw new Error("Invalid input for fibonacci series.");
         let fib = [0, 1];
         for (let i = 2; i < n; i++) fib.push(fib[i - 1] + fib[i - 2]);
-        resultData = fib.slice(0, n);
+        resultData = n === 1 ? [0] : fib.slice(0, n);
         break;
 
       case "prime":
-        resultData = input.filter((n) => isPrime(n));
+        if (!Array.isArray(input))
+          throw new Error("Input must be an integer array.");
+        resultData = input.filter((n) => typeof n === "number" && isPrime(n));
         break;
 
       case "lcm":
+        if (!Array.isArray(input) || input.length === 0)
+          throw new Error("Input must be a non-empty integer array.");
         resultData = input.reduce((a, b) => lcm(a, b));
         break;
 
       case "hcf":
+        if (!Array.isArray(input) || input.length === 0)
+          throw new Error("Input must be a non-empty integer array.");
         resultData = input.reduce((a, b) => gcd(a, b));
         break;
 
       case "AI":
+        if (typeof input !== "string")
+          throw new Error("AI input must be a question string.");
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "models/gemini-pro" });
-        const prompt = `${input}\nAnswer in exactly one word.`;
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `Answer the following question in exactly one word: ${input}`;
         const result = await model.generateContent(prompt);
-
-        resultData = result.response
-          .text()
-          .trim()
-          .split(" ")[0]
-          .replace(/[^a-zA-Z]/g, "");
-
+        resultData = result.response.text().trim().replace(/[.,!]/g, "");
         break;
 
       default:
         return res
           .status(400)
-          .json({ is_success: false, message: "Invalid key" });
+          .json({
+            is_success: false,
+            message: "Invalid functional key provided.",
+          });
     }
 
     res.status(200).json({
@@ -84,7 +93,11 @@ app.post("/bfhl", async (req, res) => {
       data: resultData,
     });
   } catch (error) {
-    res.status(500).json({ is_success: false, message: error.message });
+    res.status(400).json({
+      is_success: false,
+      official_email: CHITKARA_EMAIL,
+      message: error.message,
+    });
   }
 });
 
